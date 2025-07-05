@@ -5,6 +5,8 @@ import fs from "fs/promises"
 
 export namespace Share {
   const log = Log.create({ service: "share" })
+  
+  type SessionTree = { session: any, messages: any[], children: SessionTree[] }
 
   export async function sync(_key: string, _content: any) {
     // Local sharing doesn't need cloud sync - no-op
@@ -23,25 +25,49 @@ export namespace Share {
     const session = await Session.get(sessionID)
     const messages = await Session.messages(sessionID)
     
-    // Collect child sessions if requested (default: true for root sessions)
-    const childSessions: Array<{ session: any, messages: any[] }> = []
+    // Recursively collect all child sessions with their full hierarchy
+    const childSessions: SessionTree[] = []
     const includeChildren = options?.includeChildSessions ?? true
     
-    if (includeChildren) {
-      const children = await Session.children(sessionID)
-      for (const child of children) {
+    // Recursive function to collect the full session tree
+    async function collectSessionTree(parentID: string): Promise<SessionTree[]> {
+      const directChildren = await Session.children(parentID)
+      const result: SessionTree[] = []
+      
+      for (const child of directChildren) {
         try {
           const childMessages = await Session.messages(child.id)
-          childSessions.push({ session: child, messages: childMessages })
+          const grandChildren = await collectSessionTree(child.id) // RECURSION!
+          result.push({ 
+            session: child, 
+            messages: childMessages,
+            children: grandChildren
+          })
         } catch (e) {
           log.warn("failed to load child session", { childId: child.id, error: e })
         }
       }
+      
+      return result
     }
     
+    if (includeChildren) {
+      childSessions.push(...await collectSessionTree(sessionID))
+    }
+    
+    // Helper function to count all subtasks recursively
+    function countAllSubtasks(subtasks: SessionTree[]): number {
+      let count = subtasks.length
+      for (const subtask of subtasks) {
+        count += countAllSubtasks(subtask.children)
+      }
+      return count
+    }
+    
+    const totalSubtasks = countAllSubtasks(childSessions)
     const markdown = generateConversationMarkdown(session, messages, childSessions)
-    const html = generateConversationHTML(session, messages, childSessions, markdown)
-    const suffix = childSessions.length > 0 ? `-with-${childSessions.length}-tasks` : ''
+    const html = generateConversationHTML(session, messages, childSessions, markdown, totalSubtasks)
+    const suffix = totalSubtasks > 0 ? `-with-${totalSubtasks}-tasks` : ''
     const fileName = `opencode-session-${sessionID.slice(-8)}${suffix}.html`
     const filePath = path.join(process.cwd(), fileName)
     
@@ -50,7 +76,8 @@ export namespace Share {
     log.info("created local share", {
       sessionID,
       filePath,
-      childSessions: childSessions.length,
+      totalSubtasks,
+      fileSize: html.length
     })
     
     // Return same format as cloud sharing for compatibility
@@ -62,28 +89,122 @@ export namespace Share {
 
   export async function remove(id: string) {
     // Remove local HTML files instead of cloud share
-    const fileName = `opencode-session-${id.slice(-8)}.html`
-    const filePath = path.join(process.cwd(), fileName)
+    // Try to find files matching the pattern since we don't know the exact filename
+    const baseFileName = `opencode-session-${id.slice(-8)}`
+    
+    let removed = false
     
     try {
-      await fs.unlink(filePath)
-      log.info("removed local share", { filePath })
+      const files = await fs.readdir(process.cwd())
+      const matchingFiles = files.filter(file => 
+        file.startsWith(baseFileName) && file.endsWith('.html')
+      )
+      
+      for (const fileName of matchingFiles) {
+        const filePath = path.join(process.cwd(), fileName)
+        try {
+          await fs.unlink(filePath)
+          log.info("removed local share", { filePath })
+          removed = true
+        } catch (e) {
+          log.warn("failed to remove local share file", { filePath, error: e })
+        }
+      }
+      
+      if (!removed) {
+        log.warn("no matching share files found", { baseFileName })
+      }
     } catch (e) {
-      // File might not exist, that's ok
-      log.warn("failed to remove local share file", { filePath, error: e })
+      log.warn("failed to list directory for cleanup", { error: e })
     }
     
     return { success: true }
   }
 
-  function generateConversationHTML(session: any, messages: any[], childSessions: Array<{ session: any, messages: any[] }> = [], markdown: string): string {
+  function generateConversationHTML(session: any, messages: any[], childSessions: SessionTree[] = [], markdown: string, totalSubtasks: number = 0): string {
     const title = session.title || "OpenCode Session"
     
-    // Create a map of task sessions by their creation order for inline placement
-    const taskSessionMap = new Map()
-    childSessions.forEach(child => {
-      taskSessionMap.set(child.session.id, child)
-    })
+    // Recursive function to render subtask tree
+    function renderSubtaskTree(subtasks: SessionTree[], depth: number = 0): string {
+      if (subtasks.length === 0) return ''
+      
+      const indentClass = depth > 0 ? `ml-${Math.min(depth * 4, 16)}` : 'ml-8'
+      const borderColor = depth % 2 === 0 ? 'border-blue-200' : 'border-purple-200'
+      
+      return `
+        <div class="mt-6 ${indentClass}">
+          ${subtasks.map((child, _taskIndex) => `
+            <div class="border-l-3 ${borderColor} pl-6 mb-4" x-data="{ open: false }">
+              <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
+                <button @click="open = !open" class="w-full text-left">
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div class="font-semibold text-sm text-indigo-900">
+                        ${'  '.repeat(depth)}Subtask: ${escapeHtml(child.session.title || 'Untitled')}
+                      </div>
+                      <div class="text-xs text-indigo-700 mt-1">
+                        <span class="font-mono">${child.session.id}</span> · ${child.messages.length} messages
+                        ${child.children.length > 0 ? ` · ${child.children.length} subtasks` : ''}
+                      </div>
+                    </div>
+                    <svg class="w-4 h-4 text-indigo-600 transition-transform duration-200" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+                    </svg>
+                  </div>
+                </button>
+                
+                <div x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" class="mt-4 space-y-4">
+                  ${renderSubtaskMessages(child.messages, depth)}
+                  ${renderSubtaskTree(child.children, depth + 1)}
+                </div>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `
+    }
+    
+    // Function to render messages within a subtask
+    function renderSubtaskMessages(taskMessages: any[], _depth: number): string {
+      return taskMessages.map((taskMsg) => {
+        const taskModelInfo = taskMsg.metadata?.assistant?.modelID ? `${taskMsg.metadata.assistant.modelID.split('/').pop() || taskMsg.metadata.assistant.modelID}` : ''
+        const taskTimestamp = taskMsg.metadata?.time?.created ? new Date(taskMsg.metadata.time.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+        const taskMessageText = extractMessageText(taskMsg.parts || [])
+        
+        return `
+          <div class="${taskMsg.role === 'user' ? 'flex justify-end' : ''}">
+            <div class="${taskMsg.role === 'user' ? 'max-w-lg' : 'w-full'}">
+              <div class="${taskMsg.role === 'user' ? 'border-r-3 border-teal-400 bg-teal-50' : 'border-l-3 border-yellow-400 bg-yellow-50'} rounded px-4 py-3 relative">
+                <button 
+                  onclick="copyToClipboard('${escapeHtml(taskMessageText).replace(/'/g, "\\\\'")}', this)" 
+                  class="absolute top-1 right-1 p-1 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded transition-colors duration-200 opacity-60 hover:opacity-100"
+                  title="Copy message"
+                >
+                  <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                  </svg>
+                </button>
+                <div class="text-sm text-gray-900 pr-8">
+                  ${(taskMsg.parts || []).map((part: any) => formatMessagePart(part, taskMsg.role)).join('')}
+                </div>
+                ${(taskModelInfo || taskTimestamp) && taskMsg.role === 'assistant' ? `
+                  <div class="mt-2 text-xs text-gray-500 flex items-center gap-2">
+                    ${taskModelInfo ? `<span>${taskModelInfo}</span>` : ''}
+                    ${taskModelInfo && taskTimestamp ? `<span>·</span>` : ''}
+                    ${taskTimestamp ? `<span>${taskTimestamp}</span>` : ''}
+                  </div>
+                ` : ''}
+                ${taskTimestamp && taskMsg.role === 'user' ? `
+                  <div class="mt-2 text-xs text-gray-500 text-right">
+                    ${taskTimestamp}
+                  </div>
+                ` : ''}
+              </div>
+            </div>
+          </div>
+        `
+      }).join('')
+    }
     
     return `<!DOCTYPE html>
 <html lang="en">
@@ -148,7 +269,7 @@ export namespace Share {
             <h1 class="text-2xl font-semibold mb-2">${escapeHtml(title)}</h1>
             <div class="text-sm text-gray-600 space-y-1">
                 <div>Session ID: <span class="font-mono text-xs">${escapeHtml(session.id || 'Unknown')}</span></div>
-                <div>${session.time?.created ? new Date(session.time.created).toLocaleDateString() : ''} · ${messages.length} messages · ${childSessions.length} subtasks</div>
+                <div>${session.time?.created ? new Date(session.time.created).toLocaleDateString() : ''} · ${messages.length} messages · ${totalSubtasks} subtasks</div>
             </div>
             <div class="mt-4">
                 <button 
@@ -211,71 +332,8 @@ export namespace Share {
               )
               
               if (taskToolParts.length > 0 && childSessions.length > 0) {
-                // Add task sessions inline after this message
-                messageHtml += `
-                  <div class="mt-6 ml-8">
-                    ${childSessions.map((child, _taskIndex) => `
-                      <div class="border-l-3 border-blue-200 pl-6" x-data="{ open: false }">
-                        <div class="bg-indigo-50 border border-indigo-200 rounded-lg p-4">
-                          <button @click="open = !open" class="w-full text-left">
-                            <div class="flex items-center justify-between">
-                              <div>
-                                <div class="font-semibold text-sm text-indigo-900">Subtask: ${escapeHtml(child.session.title || 'Untitled')}</div>
-                                <div class="text-xs text-indigo-700 mt-1">
-                                  <span class="font-mono">${child.session.id}</span> · ${child.messages.length} messages
-                                </div>
-                              </div>
-                              <svg class="w-4 h-4 text-indigo-600 transition-transform duration-200" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-                              </svg>
-                            </div>
-                          </button>
-                          
-                          <div x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" class="mt-4 space-y-4">
-                            ${child.messages.map((taskMsg) => {
-                              const taskModelInfo = taskMsg.metadata?.assistant?.modelID ? `${taskMsg.metadata.assistant.modelID.split('/').pop() || taskMsg.metadata.assistant.modelID}` : '';
-                              const taskTimestamp = taskMsg.metadata?.time?.created ? new Date(taskMsg.metadata.time.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
-                              const taskMessageText = extractMessageText(taskMsg.parts || []);
-                              
-                              return `
-                                <div class="${taskMsg.role === 'user' ? 'flex justify-end' : ''}">
-                                  <div class="${taskMsg.role === 'user' ? 'max-w-lg' : 'w-full'}">
-                                    <div class="${taskMsg.role === 'user' ? 'border-r-3 border-teal-400 bg-teal-50' : 'border-l-3 border-yellow-400 bg-yellow-50'} rounded px-4 py-3 relative">
-                                      <button 
-                                        onclick="copyToClipboard('${escapeHtml(taskMessageText).replace(/'/g, "\\'")}', this)" 
-                                        class="absolute top-1 right-1 p-1 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded transition-colors duration-200 opacity-60 hover:opacity-100"
-                                        title="Copy message"
-                                      >
-                                        <svg class="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
-                                          <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
-                                        </svg>
-                                      </button>
-                                      <div class="text-sm text-gray-900 pr-8">
-                                        ${(taskMsg.parts || []).map((part: any) => formatMessagePart(part, taskMsg.role)).join('')}
-                                      </div>
-                                      ${(taskModelInfo || taskTimestamp) && taskMsg.role === 'assistant' ? `
-                                        <div class="mt-2 text-xs text-gray-500 flex items-center gap-2">
-                                          ${taskModelInfo ? `<span>${taskModelInfo}</span>` : ''}
-                                          ${taskModelInfo && taskTimestamp ? `<span>·</span>` : ''}
-                                          ${taskTimestamp ? `<span>${taskTimestamp}</span>` : ''}
-                                        </div>
-                                      ` : ''}
-                                      ${taskTimestamp && taskMsg.role === 'user' ? `
-                                        <div class="mt-2 text-xs text-gray-500 text-right">
-                                          ${taskTimestamp}
-                                        </div>
-                                      ` : ''}
-                                    </div>
-                                  </div>
-                                </div>
-                              `;
-                            }).join('')}
-                          </div>
-                        </div>
-                      </div>
-                    `).join('')}
-                  </div>
-                `
+                // Add recursive task sessions inline after this message
+                messageHtml += renderSubtaskTree(childSessions, 0)
               }
               
               return messageHtml
@@ -467,7 +525,7 @@ export namespace Share {
     return `<span class="text-gray-600">${escapeHtml(String(value))}</span>`
   }
 
-  function generateConversationMarkdown(session: any, messages: any[], childSessions: Array<{ session: any, messages: any[] }> = []): string {
+  function generateConversationMarkdown(session: any, messages: any[], childSessions: SessionTree[] = []): string {
     const title = session.title || "OpenCode Session"
     const date = session.time?.created ? new Date(session.time.created).toLocaleDateString() : ''
     const sessionId = session.id || 'Unknown'
@@ -479,11 +537,56 @@ export namespace Share {
     markdown += `**Subtasks:** ${childSessions.length}\n\n`
     markdown += `---\n\n`
     
-    // Create a map of task sessions for inline placement
-    const taskSessionMap = new Map()
-    childSessions.forEach(child => {
-      taskSessionMap.set(child.session.id, child)
-    })
+    // Recursive function to render subtask markdown
+    function renderSubtaskMarkdown(subtasks: SessionTree[], depth: number = 0): string {
+      if (subtasks.length === 0) return ''
+      
+      let result = ''
+      
+      subtasks.forEach((child, _taskIndex) => {
+        const headingLevel = Math.min(depth + 3, 6) // Max heading level is 6
+        const heading = '#'.repeat(headingLevel)
+        
+        result += `${heading} Subtask: ${child.session.title || 'Untitled'}\n\n`
+        result += `**Session ID:** ${child.session.id}\n`
+        result += `**Messages:** ${child.messages.length}\n`
+        if (child.children.length > 0) {
+          result += `**Nested Subtasks:** ${child.children.length}\n`
+        }
+        result += `\n`
+        
+        child.messages.forEach((taskMsg) => {
+          const taskRole = taskMsg.role === 'user' ? 'User' : 'Assistant'
+          const taskTimestamp = taskMsg.metadata?.time?.created ? new Date(taskMsg.metadata.time.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
+          const taskModelInfo = taskMsg.metadata?.assistant?.modelID ? taskMsg.metadata.assistant.modelID.split('/').pop() : ''
+          
+          result += `${heading}# ${taskRole}`
+          if (taskTimestamp || taskModelInfo) {
+            result += ` (${[taskModelInfo, taskTimestamp].filter(Boolean).join(' · ')})`
+          }
+          result += `\n\n`
+          
+          let taskHasContent = false
+          for (const part of taskMsg.parts || []) {
+            if (part.type === 'text' && part.text && part.text.trim()) {
+              result += `${part.text.trim()}\n\n`
+              taskHasContent = true
+            }
+          }
+          
+          if (!taskHasContent) {
+            result += `*No content*\n\n`
+          }
+        })
+        
+        result += `---\n\n`
+        
+        // RECURSION: Render nested subtasks
+        result += renderSubtaskMarkdown(child.children, depth + 1)
+      })
+      
+      return result
+    }
     
     // Process main conversation messages
     messages.forEach((message, _messageIndex) => {
@@ -548,37 +651,8 @@ export namespace Share {
       )
       
       if (taskToolParts.length > 0 && childSessions.length > 0) {
-        childSessions.forEach((child, _taskIndex) => {
-          markdown += `### Subtask: ${child.session.title || 'Untitled'}\n\n`
-          markdown += `**Session ID:** ${child.session.id}\n`
-          markdown += `**Messages:** ${child.messages.length}\n\n`
-          
-          child.messages.forEach((taskMsg) => {
-            const taskRole = taskMsg.role === 'user' ? 'User' : 'Assistant'
-            const taskTimestamp = taskMsg.metadata?.time?.created ? new Date(taskMsg.metadata.time.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
-            const taskModelInfo = taskMsg.metadata?.assistant?.modelID ? taskMsg.metadata.assistant.modelID.split('/').pop() : ''
-            
-            markdown += `#### ${taskRole}`
-            if (taskTimestamp || taskModelInfo) {
-              markdown += ` (${[taskModelInfo, taskTimestamp].filter(Boolean).join(' · ')})`
-            }
-            markdown += `\n\n`
-            
-            let taskHasContent = false
-            for (const part of taskMsg.parts || []) {
-              if (part.type === 'text' && part.text && part.text.trim()) {
-                markdown += `${part.text.trim()}\n\n`
-                taskHasContent = true
-              }
-            }
-            
-            if (!taskHasContent) {
-              markdown += `*No content*\n\n`
-            }
-          })
-          
-          markdown += `---\n\n`
-        })
+        // Add recursive subtask markdown
+        markdown += renderSubtaskMarkdown(childSessions, 0)
       }
     })
     
