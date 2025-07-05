@@ -6,6 +6,21 @@ import { Bus } from "../bus"
 import { Message } from "../session/message"
 import { Storage } from "../storage/storage"
 import { Identifier } from "../id/id"
+import { Provider } from "../provider/provider"
+
+async function findProviderForModel(modelID: string): Promise<string | null> {
+  try {
+    const providers = await Provider.list()
+    for (const [providerID, provider] of Object.entries(providers)) {
+      if (provider.info.models[modelID]) {
+        return providerID
+      }
+    }
+    return null
+  } catch (error) {
+    return null
+  }
+}
 
 async function copyMessageHistory(sourceSessionID: string, targetSessionID: string, stripLastUserMessage: boolean = true) {
   const sourceMessages = await Session.messages(sourceSessionID)
@@ -61,7 +76,7 @@ export const TaskTool = Tool.define({
     prompt: z.string().describe("The task for the agent to perform"),
     modelId: z.string().optional().describe("Override model ID for this task"),
     providerId: z.string().optional().describe("Override provider ID for this task"),
-    inheritHistory: z.boolean().optional().describe("Copy parent message history to new task (default: false). Use when the sub-task needs conversation context to understand references, previous decisions, or build upon earlier work. Skip for independent tasks that don't need prior context."),
+    inheritHistory: z.boolean().optional().describe("Copy parent message history to new task (default: false). Use when the sub-task needs conversation context to understand references, previous decisions, or build upon earlier work. Skip for independent tasks that don't need prior context. NOTE: This parameter is ignored when sessionID is provided, since you are continuing an existing conversation."),
     stripLastUserMessage: z.boolean().optional().describe("When inheritHistory is true, whether to strip the last user message from copied history (default: true). Set to false only when the last user message provides useful context rather than subtask creation instructions. WARNING: If setting to false and the last user message contains instructions to create subtasks, you MUST provide overriding instructions in your prompt to prevent infinite loops."),
     sessionID: z.string().optional().describe("Resume conversation with existing subtask session ID. If not provided, creates new subtask. Use this to continue conversations with previously created subtasks."),
   }),
@@ -112,8 +127,29 @@ export const TaskTool = Tool.define({
     ctx.abort.addEventListener("abort", () => {
       Session.abort(session.id)
     })
-    const modelID = params.modelId ?? metadata.modelID
-    const providerID = params.providerId ?? metadata.providerID
+    
+    // Enhanced model/provider selection logic
+    let modelID = params.modelId ?? metadata.modelID
+    let providerID = params.providerId ?? metadata.providerID
+    
+    // If modelId is provided but providerId is not, try to find a provider that has the model
+    if (params.modelId && !params.providerId) {
+      const currentProvider = metadata.providerID
+      const providers = await Provider.list()
+      
+      // Check if current provider has the requested model
+      if (providers[currentProvider]?.info.models[params.modelId]) {
+        // Current provider has the model, use it
+        providerID = currentProvider
+      } else {
+        // Current provider doesn't have the model, search for one that does
+        const foundProviderID = await findProviderForModel(params.modelId)
+        if (foundProviderID) {
+          providerID = foundProviderID
+        }
+        // If no provider found with the model, keep the current provider (will fail gracefully later)
+      }
+    }
     const result = await Session.chat({
       sessionID: session.id,
       modelID: modelID,
@@ -126,13 +162,22 @@ export const TaskTool = Tool.define({
       ],
     })
     unsub()
+    const taskResult = result.parts.findLast((x) => x.type === "text")!.text
+    const embeddedResult = `<result>${taskResult}</result>
+<metadata>
+sessionID: ${session.id}
+title: ${params.description}
+modelID: ${modelID}
+providerID: ${providerID}
+</metadata>`
+
     return {
       metadata: {
         title: params.description,
         sessionID: session.id,
         summary: summary(result),
       },
-      output: result.parts.findLast((x) => x.type === "text")!.text,
+      output: embeddedResult,
     }
   },
 })
