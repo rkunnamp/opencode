@@ -13,6 +13,7 @@ export const TaskTool = Tool.define({
       .string()
       .describe("A short (3-5 words) description of the task"),
     prompt: z.string().describe("The task for the agent to perform"),
+    modelId: z.string().optional().describe("Override model ID for this task"),
   }),
   async execute(params, ctx) {
     const session = await Session.create(ctx.sessionID)
@@ -44,9 +45,10 @@ export const TaskTool = Tool.define({
     ctx.abort.addEventListener("abort", () => {
       Session.abort(session.id)
     })
+    const modelID = params.modelId ?? metadata.modelID
     const result = await Session.chat({
       sessionID: session.id,
-      modelID: metadata.modelID,
+      modelID: modelID,
       providerID: metadata.providerID,
       parts: [
         {
