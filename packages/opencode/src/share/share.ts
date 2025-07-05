@@ -69,15 +69,18 @@ export namespace Share {
     const html = generateConversationHTML(session, messages, childSessions, markdown, totalSubtasks)
     const suffix = totalSubtasks > 0 ? `-with-${totalSubtasks}-tasks` : ''
     const fileName = `opencode-session-${sessionID.slice(-8)}${suffix}.html`
-    const filePath = path.join(process.cwd(), fileName)
+    
+    // Create export directory if it doesn't exist
+    const exportDir = '/tmp/opencode'
+    await fs.mkdir(exportDir, { recursive: true })
+    const filePath = path.join(exportDir, fileName)
     
     await fs.writeFile(filePath, html)
     
     log.info("created local share", {
       sessionID,
       filePath,
-      totalSubtasks,
-      fileSize: html.length
+      childSessions: childSessions.length,
     })
     
     // Return same format as cloud sharing for compatibility
@@ -91,17 +94,18 @@ export namespace Share {
     // Remove local HTML files instead of cloud share
     // Try to find files matching the pattern since we don't know the exact filename
     const baseFileName = `opencode-session-${id.slice(-8)}`
+    const exportDir = '/tmp/opencode'
     
     let removed = false
     
     try {
-      const files = await fs.readdir(process.cwd())
+      const files = await fs.readdir(exportDir)
       const matchingFiles = files.filter(file => 
         file.startsWith(baseFileName) && file.endsWith('.html')
       )
       
       for (const fileName of matchingFiles) {
-        const filePath = path.join(process.cwd(), fileName)
+        const filePath = path.join(exportDir, fileName)
         try {
           await fs.unlink(filePath)
           log.info("removed local share", { filePath })

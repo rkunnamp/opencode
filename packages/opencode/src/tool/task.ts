@@ -7,22 +7,26 @@ import { Message } from "../session/message"
 import { Storage } from "../storage/storage"
 import { Identifier } from "../id/id"
 
-async function copyMessageHistory(sourceSessionID: string, targetSessionID: string) {
+async function copyMessageHistory(sourceSessionID: string, targetSessionID: string, stripLastUserMessage: boolean = true) {
   const sourceMessages = await Session.messages(sourceSessionID)
   
-  // Find the last user message (which triggered this TaskTool)
-  let lastUserMessageIndex = -1
-  for (let i = sourceMessages.length - 1; i >= 0; i--) {
-    if (sourceMessages[i].role === "user") {
-      lastUserMessageIndex = i
-      break
-    }
-  }
+  let messagesToCopy = sourceMessages
   
-  // Copy all messages up to (but not including) the last user message
-  const messagesToCopy = lastUserMessageIndex >= 0 
-    ? sourceMessages.slice(0, lastUserMessageIndex)
-    : sourceMessages
+  if (stripLastUserMessage) {
+    // Find the last user message (which triggered this TaskTool)
+    let lastUserMessageIndex = -1
+    for (let i = sourceMessages.length - 1; i >= 0; i--) {
+      if (sourceMessages[i].role === "user") {
+        lastUserMessageIndex = i
+        break
+      }
+    }
+    
+    // Copy all messages up to (but not including) the last user message
+    messagesToCopy = lastUserMessageIndex >= 0 
+      ? sourceMessages.slice(0, lastUserMessageIndex)
+      : sourceMessages
+  }
   
   for (const message of messagesToCopy) {
     // Create a new message with new ID but same content
@@ -58,15 +62,29 @@ export const TaskTool = Tool.define({
     modelId: z.string().optional().describe("Override model ID for this task"),
     providerId: z.string().optional().describe("Override provider ID for this task"),
     inheritHistory: z.boolean().optional().describe("Copy parent message history to new task (default: false). Use when the sub-task needs conversation context to understand references, previous decisions, or build upon earlier work. Skip for independent tasks that don't need prior context."),
+    stripLastUserMessage: z.boolean().optional().describe("When inheritHistory is true, whether to strip the last user message from copied history (default: true). Set to false only when the last user message provides useful context rather than subtask creation instructions. WARNING: If setting to false and the last user message contains instructions to create subtasks, you MUST provide overriding instructions in your prompt to prevent infinite loops."),
+    sessionID: z.string().optional().describe("Resume conversation with existing subtask session ID. If not provided, creates new subtask. Use this to continue conversations with previously created subtasks."),
   }),
   async execute(params, ctx) {
-    const session = await Session.create(ctx.sessionID)  // Pass parent session ID as parentID
+    // Create new session or get existing one
+    let session
+    if (params.sessionID) {
+      try {
+        session = await Session.get(params.sessionID)
+      } catch (error) {
+        throw new Error(`Failed to resume subtask: session ${params.sessionID} not found`)
+      }
+    } else {
+      session = await Session.create(ctx.sessionID)  // Pass parent session ID as parentID
+    }
+    
     const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
     const metadata = msg.metadata.assistant!
 
-    // Copy message history if requested
-    if (params.inheritHistory) {
-      await copyMessageHistory(ctx.sessionID, session.id)
+    // Copy message history if requested (only for new sessions)
+    if (params.inheritHistory && !params.sessionID) {
+      const stripLastUserMessage = params.stripLastUserMessage ?? true
+      await copyMessageHistory(ctx.sessionID, session.id, stripLastUserMessage)
     }
 
     function summary(input: Message.Info) {
@@ -111,6 +129,7 @@ export const TaskTool = Tool.define({
     return {
       metadata: {
         title: params.description,
+        sessionID: session.id,
         summary: summary(result),
       },
       output: result.parts.findLast((x) => x.type === "text")!.text,
