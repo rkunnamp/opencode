@@ -60,7 +60,7 @@ export const TaskTool = Tool.define({
     inheritHistory: z.boolean().optional().describe("Copy parent message history to new task (default: false). Use when the sub-task needs conversation context to understand references, previous decisions, or build upon earlier work. Skip for independent tasks that don't need prior context."),
   }),
   async execute(params, ctx) {
-    const session = await Session.create(ctx.sessionID)
+    const session = await Session.create(ctx.sessionID)  // Pass parent session ID as parentID
     const msg = await Session.getMessage(ctx.sessionID, ctx.messageID)
     const metadata = msg.metadata.assistant!
 

@@ -161,7 +161,11 @@ export namespace Session {
 
   export async function share(id: string) {
     const session = await get(id)
-    if (session.share) return session.share
+    // Always regenerate for local sharing to get latest design and task sessions
+    // First remove any existing share files
+    if (session.share) {
+      await Share.remove(id).catch(() => {}) // Ignore errors if file doesn't exist
+    }
     const share = await Share.create(id)
     await update(id, (draft) => {
       draft.share = {
