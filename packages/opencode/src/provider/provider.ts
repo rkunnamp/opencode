@@ -19,6 +19,7 @@ import type { Tool } from "../tool/tool"
 import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
 import { TaskTool } from "../tool/task"
+import { AgentTool } from "../tool/agent"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
@@ -521,6 +522,7 @@ export namespace Provider {
     WriteTool,
     TodoWriteTool,
     TaskTool,
+    AgentTool,
     TodoReadTool,
   ]
 

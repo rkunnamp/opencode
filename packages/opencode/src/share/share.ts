@@ -334,14 +334,14 @@ export namespace Share {
                 </div>
               `
               
-              // Check if this message contains TaskTool calls and add inline task sessions
-              const taskToolParts = (message.parts || []).filter((part: any) => 
+              // Check if this message contains TaskTool or AgentTool calls and add inline subtask sessions
+              const subtaskToolParts = (message.parts || []).filter((part: any) => 
                 part.type === 'tool-invocation' && 
-                part.toolInvocation?.toolName === 'task'
+                (part.toolInvocation?.toolName === 'task' || part.toolInvocation?.toolName === 'agent')
               )
               
-              if (taskToolParts.length > 0 && childSessions.length > 0) {
-                // Add recursive task sessions inline after this message
+              if (subtaskToolParts.length > 0 && childSessions.length > 0) {
+                // Add recursive subtask sessions inline after this message
                 // Use the next message's timestamp as cutoff, or end of conversation if this is the last message
                 const nextMessage = messages[messageIndex + 1]
                 const cutoffTime = nextMessage?.metadata?.time?.created || Date.now()
@@ -656,13 +656,13 @@ export namespace Share {
       
       markdown += `---\n\n`
       
-      // Check if this message contains TaskTool calls and add inline task sessions
-      const taskToolParts = (message.parts || []).filter((part: any) => 
+      // Check if this message contains TaskTool or AgentTool calls and add inline subtask sessions
+      const subtaskToolParts = (message.parts || []).filter((part: any) => 
         part.type === 'tool-invocation' && 
-        part.toolInvocation?.toolName === 'task'
+        (part.toolInvocation?.toolName === 'task' || part.toolInvocation?.toolName === 'agent')
       )
       
-      if (taskToolParts.length > 0 && childSessions.length > 0) {
+      if (subtaskToolParts.length > 0 && childSessions.length > 0) {
         // Add recursive subtask markdown
         markdown += renderSubtaskMarkdown(childSessions, 0)
       }
