@@ -129,7 +129,7 @@ export namespace Share {
     const title = session.title || "OpenCode Session"
     
     // Recursive function to render subtask tree
-    function renderSubtaskTree(subtasks: SessionTree[], depth: number = 0): string {
+    function renderSubtaskTree(subtasks: SessionTree[], depth: number = 0, cutoffTime?: number): string {
       if (subtasks.length === 0) return ''
       
       const indentClass = depth > 0 ? `ml-${Math.min(depth * 4, 16)}` : 'ml-8'
@@ -158,8 +158,8 @@ export namespace Share {
                 </button>
                 
                 <div x-show="open" x-transition:enter="transition ease-out duration-200" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100" class="mt-4 space-y-4">
-                  ${renderSubtaskMessages(child.messages, depth)}
-                  ${renderSubtaskTree(child.children, depth + 1)}
+                  ${renderSubtaskMessages(child.messages, depth, cutoffTime)}
+                  ${renderSubtaskTree(child.children, depth + 1, cutoffTime)}
                 </div>
               </div>
             </div>
@@ -169,8 +169,13 @@ export namespace Share {
     }
     
     // Function to render messages within a subtask
-    function renderSubtaskMessages(taskMessages: any[], _depth: number): string {
-      return taskMessages.map((taskMsg) => {
+    function renderSubtaskMessages(taskMessages: any[], _depth: number, cutoffTime?: number): string {
+      // Filter messages based on cutoff time for timeline view
+      const filteredMessages = cutoffTime 
+        ? taskMessages.filter(msg => !msg.metadata?.time?.created || msg.metadata.time.created <= cutoffTime)
+        : taskMessages
+      
+      return filteredMessages.map((taskMsg) => {
         const taskModelInfo = taskMsg.metadata?.assistant?.modelID ? `${taskMsg.metadata.assistant.modelID.split('/').pop() || taskMsg.metadata.assistant.modelID}` : ''
         const taskTimestamp = taskMsg.metadata?.time?.created ? new Date(taskMsg.metadata.time.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : ''
         const taskMessageText = extractMessageText(taskMsg.parts || [])
@@ -291,7 +296,7 @@ export namespace Share {
 
         <!-- Messages -->
         <div class="space-y-6">
-            ${messages.map((message, _messageIndex) => {
+            ${messages.map((message, messageIndex) => {
               const modelInfo = message.metadata?.assistant?.modelID ? `${message.metadata.assistant.modelID.split('/').pop() || message.metadata.assistant.modelID}` : '';
               const timestamp = message.metadata?.time?.created ? new Date(message.metadata.time.created).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
               const messageText = extractMessageText(message.parts || []);
@@ -337,7 +342,10 @@ export namespace Share {
               
               if (taskToolParts.length > 0 && childSessions.length > 0) {
                 // Add recursive task sessions inline after this message
-                messageHtml += renderSubtaskTree(childSessions, 0)
+                // Use the next message's timestamp as cutoff, or end of conversation if this is the last message
+                const nextMessage = messages[messageIndex + 1]
+                const cutoffTime = nextMessage?.metadata?.time?.created || Date.now()
+                messageHtml += renderSubtaskTree(childSessions, 0, cutoffTime)
               }
               
               return messageHtml
