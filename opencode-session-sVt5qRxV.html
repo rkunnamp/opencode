@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Identifying callable tools and functions</title>
+    <meta name="description" content="OpenCode AI Conversation Export">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
+    <script>
+        function copyToClipboard(text, button) {
+            navigator.clipboard.writeText(text).then(() => {
+                const originalIcon = button.innerHTML;
+                button.innerHTML = '<svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>';
+                button.classList.add('text-green-600');
+                setTimeout(() => {
+                    button.innerHTML = originalIcon;
+                    button.classList.remove('text-green-600');
+                }, 1500);
+            }).catch(() => {
+                // Fallback for older browsers
+                const textArea = document.createElement('textarea');
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            });
+        }
+
+        function copyConversationAsMarkdown(button) {
+            const markdown = generateConversationMarkdown();
+            copyToClipboard(markdown, button);
+        }
+
+        function generateConversationMarkdown() {
+            return window.conversationMarkdown || '# Conversation Export\n\nMarkdown generation failed.';
+        }
+
+        // Set the markdown content
+        window.conversationMarkdown = "# Identifying callable tools and functions\n\n**Session ID:** ses_8263d7a1cffeYyuD4isVt5qRxV\n**Date:** 7/5/2025\n**Messages:** 2\n**Subtasks:** 0\n\n---\n\n## User (02:14 PM)\n\nwhich tools or functions can you see as callable\n\n---\n\n## Assistant (o3-high · 02:14 PM)\n\n🔧 **Tool: webfetch**\n\n**Parameters:**\n- **url:** `\"https://opencode.ai\"`\n- **format:** `\"markdown\"`\n- **timeout:** `30`\n\n**Output:**\n```\nopencode | AI coding agent built for the terminalopencode | opencode     [Skip to content](#_top)\n\n  [![](/_astro/logo-dark.NCybiIc5.svg) ![](/_astro/logo-light.YQ6q6zRd.svg) opencode](/)\n\n[Home](/)[Docs](/docs/)\n\n[](https://github.com/sst/opencode)\n\nSearch CtrlK\n\nCancel\n\n![opencode logo](/_astro/logo-ornate-dark.Dud6hvMG_19DKCs.svg) ![opencode logo](/_astro/logo-ornate-light.BKqu4QZH_19DKCs.svg)\n\n# The AI coding agent built for the terminal.\n\n[Docs](/docs)\n\n`curl -fsSL https://opencode.ai/install | bash`\n\n[GitHub](https://github.com/sst/opencode)\n\n-   **Native TUI**: A responsive, native, themeable terminal UI.\n-   **LSP enabled**: Automatically loads the right LSPs for the LLM.\n-   **Multi-session**: Start multiple agents in parallel on the same project.\n-   **Shareable links**: Share a link to any sessions for reference or to debug.\n-   **Claude Pro**: Log in with Anthropic to use your Claude Pro or Max account.\n-   **Use any model**: Supports 75+ LLM providers through [Models.dev](https://models.dev), including local models.\n\nopencode TUI with the tokyonight theme\n\n![opencode TUI with the tokyonight theme](/_astro/screenshot-splash.Br7Db4P4_ZUNKo1.webp)\n\nVersion: Beta\n\nAuthor: [SST](https://sst.dev)\n```\n\nBash, Read, Write, Edit, Glob, Grep, List, WebFetch, TodoRead, TodoWrite, Task, plus lsp_hover, lsp_diagnostics, patch.\n\n---\n\n*Exported from OpenCode on 7/5/2025*\n";
+    </script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Helvetica', 'Arial', sans-serif; }
+        .font-mono { font-family: 'Menlo', 'Monaco', 'Courier New', monospace; }
+        .chat-container { max-width: 48rem; margin: 0 auto; }
+        .message-content { line-height: 1.6; }
+        .border-l-3 { border-left-width: 3px; }
+        .border-r-3 { border-right-width: 3px; }
+        pre { white-space: pre-wrap; word-break: break-word; }
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f9fafb; }
+        ::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #d1d5db; }
+    </style>
+</head>
+<body class="bg-white text-gray-900">
+    <div class="chat-container px-4 py-12">
+        <!-- Header -->
+        <div class="mb-12 text-center">
+            <h1 class="text-2xl font-semibold mb-2">Identifying callable tools and functions</h1>
+            <div class="text-sm text-gray-600 space-y-1">
+                <div>Session ID: <span class="font-mono text-xs">ses_8263d7a1cffeYyuD4isVt5qRxV</span></div>
+                <div>7/5/2025 · 2 messages · 0 subtasks</div>
+            </div>
+            <div class="mt-4">
+                <button 
+                    onclick="copyConversationAsMarkdown(this)" 
+                    class="inline-flex items-center gap-2 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 hover:bg-gray-100 border border-gray-300 rounded-lg transition-colors duration-200"
+                    title="Copy entire conversation as Markdown"
+                >
+                    <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                    </svg>
+                    Copy as Markdown
+                </button>
+            </div>
+        </div>
+
+        <!-- Messages -->
+        <div class="space-y-6">
+            
+                <div class="flex justify-end">
+                    <div class="max-w-2xl">
+                        <div class="border-r-4 border-teal-400 bg-teal-50 rounded-lg px-5 py-4 relative group">
+                            <button 
+                                onclick="copyToClipboard('which tools or functions can you see as callable', this)" 
+                                class="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded transition-colors duration-200 opacity-60 hover:opacity-100"
+                                title="Copy message"
+                            >
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                </svg>
+                            </button>
+                            <div class="message-content text-gray-900 pr-10">
+                                <div class="whitespace-pre-wrap">which tools or functions can you see as callable</div>
+                            </div>
+                            
+                            
+                                <div class="mt-3 text-xs text-gray-500 text-right">
+                                    02:14 PM
+                                </div>
+                            
+                        </div>
+                    </div>
+                </div>
+              
+                <div class="">
+                    <div class="w-full">
+                        <div class="border-l-4 border-blue-400 bg-blue-50 rounded-lg px-5 py-4 relative group">
+                            <button 
+                                onclick="copyToClipboard('Bash, Read, Write, Edit, Glob, Grep, List, WebFetch, TodoRead, TodoWrite, Task, plus lsp_hover, lsp_diagnostics, patch.', this)" 
+                                class="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-white/50 rounded transition-colors duration-200 opacity-60 hover:opacity-100"
+                                title="Copy message"
+                            >
+                                <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+                                </svg>
+                            </button>
+                            <div class="message-content text-gray-900 pr-10">
+                                
+            <div class="mt-3 bg-white border border-gray-200 rounded-lg p-4 shadow-sm">
+              <div class="flex items-center gap-3 mb-3">
+                <div class="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center">
+                  <svg class="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+                  </svg>
+                </div>
+                <div class="flex-1">
+                  <div class="font-semibold text-gray-900">webfetch</div>
+                  <div class="text-sm text-green-600">Tool Result</div>
+                </div>
+              </div>
+              
+                <div class="bg-gray-50 rounded-lg p-3 mb-3">
+                  <div class="text-xs text-gray-500 mb-3 font-medium">Parameters:</div>
+                  
+        <div class="mb-2 last:mb-0">
+          <div class="flex items-start gap-2">
+            <span class="text-xs font-mono font-semibold text-blue-700 bg-blue-200 px-2 py-1 rounded">url</span>
+            <div class="flex-1 min-w-0"><span class="text-gray-800">"https://opencode.ai"</span></div>
+          </div>
+        </div>
+      
+        <div class="mb-2 last:mb-0">
+          <div class="flex items-start gap-2">
+            <span class="text-xs font-mono font-semibold text-blue-700 bg-blue-200 px-2 py-1 rounded">format</span>
+            <div class="flex-1 min-w-0"><span class="text-gray-800">"markdown"</span></div>
+          </div>
+        </div>
+      
+        <div class="mb-2 last:mb-0">
+          <div class="flex items-start gap-2">
+            <span class="text-xs font-mono font-semibold text-blue-700 bg-blue-200 px-2 py-1 rounded">timeout</span>
+            <div class="flex-1 min-w-0"><span class="text-green-600 font-medium">30</span></div>
+          </div>
+        </div>
+      
+                </div>
+              
+              <div class="bg-gray-50 rounded-lg p-3">
+                <div class="text-xs text-gray-500 mb-2 font-medium">Output:</div>
+                <div class="text-sm font-mono whitespace-pre-wrap max-h-80 overflow-y-auto text-gray-700 border border-gray-200 rounded bg-white p-3">opencode | AI coding agent built for the terminalopencode | opencode     [Skip to content](#_top)
+
+  [![](/_astro/logo-dark.NCybiIc5.svg) ![](/_astro/logo-light.YQ6q6zRd.svg) opencode](/)
+
+[Home](/)[Docs](/docs/)
+
+[](https://github.com/sst/opencode)
+
+Search CtrlK
+
+Cancel
+
+![opencode logo](/_astro/logo-ornate-dark.Dud6hvMG_19DKCs.svg) ![opencode logo](/_astro/logo-ornate-light.BKqu4QZH_19DKCs.svg)
+
+# The AI coding agent built for the terminal.
+
+[Docs](/docs)
+
+`curl -fsSL https://opencode.ai/install | bash`
+
+[GitHub](https://github.com/sst/opencode)
+
+-   **Native TUI**: A responsive, native, themeable terminal UI.
+-   **LSP enabled**: Automatically loads the right LSPs for the LLM.
+-   **Multi-session**: Start multiple agents in parallel on the same project.
+-   **Shareable links**: Share a link to any sessions for reference or to debug.
+-   **Claude Pro**: Log in with Anthropic to use your Claude Pro or Max account.
+-   **Use any model**: Supports 75+ LLM providers through [Models.dev](https://models.dev), including local models.
+
+opencode TUI with the tokyonight theme
+
+![opencode TUI with the tokyonight theme](/_astro/screenshot-splash.Br7Db4P4_ZUNKo1.webp)
+
+Version: Beta
+
+Author: [SST](https://sst.dev)</div>
+              </div>
+            </div>
+          <div class="whitespace-pre-wrap">Bash, Read, Write, Edit, Glob, Grep, List, WebFetch, TodoRead, TodoWrite, Task, plus lsp_hover, lsp_diagnostics, patch.</div>
+                            </div>
+                            
+                                <div class="mt-3 text-xs text-gray-500 flex items-center gap-2">
+                                    <span>o3-high</span>
+                                    <span>·</span>
+                                    <span>02:14 PM</span>
+                                </div>
+                            
+                            
+                        </div>
+                    </div>
+                </div>
+              
+        </div>
+        
+        <!-- Footer -->
+        <div class="mt-16 pt-8 border-t border-gray-200 text-center text-sm text-gray-500">
+            <div>OpenCode Conversation Export · 7/5/2025</div>
+        </div>
+    </div>
+</body>
+</html>

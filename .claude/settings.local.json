@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "WebFetch(domain:sdk.vercel.ai)",
+      "WebFetch(domain:ai-sdk.dev)",
+      "Bash(ls:*)",
+      "Bash(find:*)",
+      "Bash(node:*)",
+      "Bash(rg:*)",
+      "Bash(bun run:*)",
+      "Bash(cp:*)",
+      "Bash(grep:*)",
+      "Bash(npm run typecheck:*)"
+    ],
+    "deny": []
+  }
+}

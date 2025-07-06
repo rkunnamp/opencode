@@ -1,0 +1,37 @@
+Launch a new conversational agent that has access to the following tools: Bash, Glob, Grep, LS, Read, Edit, MultiEdit, Write, NotebookRead, NotebookEdit, WebFetch, TodoRead, TodoWrite, WebSearch. Unlike the Task tool, this agent supports ongoing conversations and can maintain context across multiple interactions.
+
+Key Features:
+- **Conversational**: The agent can engage in multi-turn conversations using the sessionID parameter
+- **Resumable**: Use sessionID to continue previous agent conversations
+- **Context-aware**: Can inherit conversation history from parent sessions
+- **Proactive**: Agents can take initiative and suggest follow-up actions
+- **Persistent**: Agent sessions persist and can be resumed at any time
+
+When to use the Agent tool:
+- For complex tasks requiring multiple interactions and decision points
+- When you need an agent that can ask clarifying questions
+- For exploratory tasks where the path forward isn't immediately clear
+- When you want an agent to maintain context across multiple exchanges
+- For collaborative problem-solving scenarios
+
+When NOT to use the Agent tool:
+- For simple, single-shot tasks (use Task tool instead)
+- When you need immediate results without conversation
+- For tasks with clearly defined, linear steps
+
+Usage notes:
+1. **New Conversations**: Omit sessionID to create a new agent session
+2. **Resume Conversations**: Provide sessionID to continue with an existing agent
+3. **Context Inheritance**: Use inheritHistory=true to share parent conversation context
+4. **Model Selection**: Specify modelId/providerId to use different AI models
+5. **Multi-turn Interactions**: The agent can ask questions and receive responses through continued conversation
+6. **Session Management**: Each agent maintains its own conversation history and state
+
+Conversational Capabilities:
+- Agents can ask for clarification when requirements are unclear
+- Can suggest alternative approaches and discuss trade-offs
+- Maintain context of previous decisions and actions
+- Can break down complex tasks into manageable steps with user feedback
+- Support iterative refinement of solutions
+
+The agent will return both the immediate response and session metadata for continuing the conversation. Use the returned sessionID in subsequent calls to maintain conversation continuity.

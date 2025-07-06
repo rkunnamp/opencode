@@ -16,15 +16,19 @@ import { ReadTool } from "../tool/read"
 import type { Tool } from "../tool/tool"
 import { WriteTool } from "../tool/write"
 import { TodoReadTool, TodoWriteTool } from "../tool/todo"
+import { TaskTool } from "../tool/task"
+import { AgentTool } from "../tool/agent"
 import { AuthAnthropic } from "../auth/anthropic"
 import { AuthCopilot } from "../auth/copilot"
 import { ModelsDev } from "./models"
-import { NamedError } from "../util/error"
 import { Auth } from "../auth"
-// import { TaskTool } from "../tool/task"
+import * as ProviderErrors from "./errors"
 
 export namespace Provider {
   const log = Log.create({ service: "provider" })
+  
+  // Debug logging toggle - set to false to disable debug logging
+  const DEBUG_LOGGING = false
 
   type CustomLoader = (
     provider: ModelsDev.Provider,
@@ -375,16 +379,122 @@ export namespace Provider {
       using _ = log.time("getSDK", {
         providerID: provider.id,
       })
+
+      // Debug: Log provider info
+      const debugLog = (msg: string, data?: any) => {
+        if (!DEBUG_LOGGING) return
+        const logEntry = `[${new Date().toISOString()}] getSDK(${provider.id}): ${msg}${data ? " " + JSON.stringify(data) : ""}\n`
+        try {
+          require("fs").appendFileSync("/tmp/opencode-debug.log", logEntry)
+        } catch (e) {
+          console.error("Failed to write debug log:", e)
+        }
+      }
+
+      debugLog("Starting SDK initialization", {
+        providerId: provider.id,
+        npm: provider.npm,
+      })
+
       const s = await state()
       const existing = s.sdk.get(provider.id)
-      if (existing) return existing
+      if (existing) {
+        debugLog("Found existing SDK, returning cached version")
+        return existing
+      }
+
       const pkg = provider.npm ?? provider.id
-      const mod = await import(await BunProc.install(pkg, "latest"))
-      const fn = mod[Object.keys(mod).find((key) => key.startsWith("create"))!]
-      const loaded = fn(s.providers[provider.id]?.options)
+      debugLog("Package to install/import", { pkg })
+
+      let mod: any
+      try {
+        debugLog("Trying BunProc.install first")
+        const installPath = await BunProc.install(pkg, "latest")
+        debugLog("BunProc.install successful", { installPath })
+
+        try {
+          debugLog("Trying import from install path")
+          mod = await import(installPath)
+          debugLog("Import from install path successful", {
+            moduleKeys: Object.keys(mod),
+          })
+        } catch (pathError) {
+          debugLog("Import from install path failed, trying package name", {
+            pathError: (pathError as Error).message,
+          })
+          mod = await import(pkg)
+          debugLog("Import from package name successful", {
+            moduleKeys: Object.keys(mod),
+          })
+        }
+      } catch (installError) {
+        debugLog("BunProc.install failed, trying package name directly", {
+          installError: (installError as Error).message,
+        })
+        try {
+          mod = await import(pkg)
+          debugLog("Direct package name import successful", {
+            moduleKeys: Object.keys(mod),
+          })
+        } catch (pkgError) {
+          debugLog("All import methods failed", {
+            installError: (installError as Error).message,
+            pkgError: (pkgError as Error).message,
+          })
+          throw pkgError
+        }
+      }
+
+      const availableKeys = Object.keys(mod)
+      const createFunctionKey = availableKeys.find((key) =>
+        key.startsWith("create"),
+      )
+      debugLog("Looking for create function", {
+        availableKeys,
+        foundKey: createFunctionKey,
+      })
+
+      if (!createFunctionKey) {
+        debugLog("No create function found")
+        throw new Error(
+          `No function starting with 'create' found in module. Available functions: ${availableKeys.join(", ")}`,
+        )
+      }
+
+      const fn = mod[createFunctionKey]
+      const providerOptions = s.providers[provider.id]?.options
+      debugLog("Calling create function", {
+        functionName: createFunctionKey,
+        options: providerOptions,
+        fnType: typeof fn,
+      })
+
+      let loaded: any
+      try {
+        loaded = fn(providerOptions)
+        debugLog("SDK creation successful", { loadedType: typeof loaded })
+      } catch (e) {
+        debugLog("SDK creation failed", { error: (e as Error).message, stack: (e as Error).stack })
+        throw e
+      }
+
       s.sdk.set(provider.id, loaded)
+      debugLog("SDK cached and returning")
       return loaded as SDK
     })().catch((e) => {
+      const debugLog = (msg: string, data?: any) => {
+        if (!DEBUG_LOGGING) return
+        const logEntry = `[${new Date().toISOString()}] getSDK(${provider.id}): ${msg}${data ? " " + JSON.stringify(data) : ""}\n`
+        try {
+          require("fs").appendFileSync("/tmp/opencode-debug.log", logEntry)
+        } catch (err) {
+          console.error("Failed to write debug log:", err)
+        }
+      }
+      debugLog("getSDK failed, throwing ProviderInitError", {
+        error: e.message,
+        stack: e.stack,
+      })
       throw new InitError({ providerID: provider.id }, { cause: e })
     })
   }
@@ -485,8 +595,9 @@ export namespace Provider {
     // MultiEditTool,
     WriteTool,
     TodoWriteTool,
+    TaskTool,
+    AgentTool,
     TodoReadTool,
-    // TaskTool,
   ]
 
   const TOOL_MAPPING: Record<string, Tool.Info[]> = {
@@ -545,26 +656,8 @@ export namespace Provider {
     return schema
   }
 
-  export const ModelNotFoundError = NamedError.create(
-    "ProviderModelNotFoundError",
-    z.object({
-      providerID: z.string(),
-      modelID: z.string(),
-    }),
-  )
-
-  export const InitError = NamedError.create(
-    "ProviderInitError",
-    z.object({
-      providerID: z.string(),
-    }),
-  )
-
-  export const AuthError = NamedError.create(
-    "ProviderAuthError",
-    z.object({
-      providerID: z.string(),
-      message: z.string(),
-    }),
-  )
+  // Re-export errors from the separate errors module to maintain backward compatibility
+  export const ModelNotFoundError = ProviderErrors.ModelNotFoundError
+  export const InitError = ProviderErrors.InitError
+  export const AuthError = ProviderErrors.AuthError
 }
