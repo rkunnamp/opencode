@@ -10,7 +10,8 @@
       "Bash(bun run:*)",
       "Bash(cp:*)",
       "Bash(grep:*)",
-      "Bash(npm run typecheck:*)"
+      "Bash(npm run typecheck:*)",
+      "Bash(git --git-dir=../opencode-staging/.git --work-tree=../opencode-staging fetch upstream)"
     ],
     "deny": []
   }

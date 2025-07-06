@@ -197,7 +197,7 @@ export namespace Session {
     await update(id, (draft) => {
       draft.share = undefined
     })
-    await Share.remove(id, share.secret)
+    await Share.remove(id)
   }
 
   export async function update(id: string, editor: (session: Info) => void) {
